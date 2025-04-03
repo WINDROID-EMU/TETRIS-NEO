@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <CheckBox
+        android:id="@+id/soundCheckbox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Som ligado"
+        android:textSize="18sp"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Velocidade do jogo:"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp" />
+
+    <RadioGroup
+        android:id="@+id/speedRadioGroup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <RadioButton
+            android:id="@+id/slowRadio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Lenta"
+            android:textSize="16sp" />
+
+        <RadioButton
+            android:id="@+id/normalRadio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Normal"
+            android:textSize="16sp" />
+
+        <RadioButton
+            android:id="@+id/fastRadio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Rápida"
+            android:textSize="16sp" />
+
+    </RadioGroup>
+
+</LinearLayout> 

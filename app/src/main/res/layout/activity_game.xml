@@ -3,80 +3,71 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#000000">
+    android:layout_height="match_parent">
 
     <!-- Imagem de fundo do jogo -->
-    <ImageView
-        android:id="@+id/backgroundImage"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:background="#000080"
-        android:scaleType="centerCrop"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
+
+    <!-- Botões de controle do jogo em um container separado -->
 
     <FrameLayout
         android:id="@+id/gameContainer"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:layout_marginBottom="4dp"
-        android:background="#88000000"
         app:layout_constraintBottom_toTopOf="@+id/controlsOverlay"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
-    </FrameLayout>
-    
-    <!-- Botões de controle do jogo em um container separado -->
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.0" />
+
     <LinearLayout
         android:id="@+id/gameControlButtons"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_margin="12dp"
-        android:orientation="horizontal"
-        android:elevation="10dp"
+        android:layout_margin="5dp"
         android:background="#99000000"
-        android:padding="8dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        android:elevation="10dp"
+        android:orientation="horizontal"
+        android:padding="3dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/pauseButton"
             android:layout_width="60dp"
             android:layout_height="50dp"
             android:layout_marginEnd="10dp"
-            app:backgroundTint="#4CAF50"
             android:text="@string/pause"
             android:textColor="#FFFFFF"
-            android:textSize="20sp" 
+            android:textSize="20sp"
             android:textStyle="bold"
+            app:backgroundTint="#4CAF50"
             app:cornerRadius="8dp"
             app:strokeColor="#FFFFFF"
-            app:strokeWidth="1dp"/>
+            app:strokeWidth="1dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/resetButton"
             android:layout_width="60dp"
             android:layout_height="50dp"
-            app:backgroundTint="#FF5722"
             android:text="@string/reset"
-            android:textColor="#FFFFFF" 
+            android:textColor="#FFFFFF"
             android:textSize="20sp"
             android:textStyle="bold"
+            app:backgroundTint="#FF5722"
             app:cornerRadius="8dp"
             app:strokeColor="#FFFFFF"
-            app:strokeWidth="1dp"/>
+            app:strokeWidth="1dp" />
     </LinearLayout>
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/controlsOverlay"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#33000000"
-        android:padding="4dp"
+        android:layout_marginBottom="8dp"
+        android:foregroundTint="#5E35B1"
+        android:padding="10dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
@@ -85,11 +76,11 @@
             android:id="@+id/leftButton"
             android:layout_width="0dp"
             android:layout_height="60dp"
-            android:layout_marginEnd="2dp"
-            app:backgroundTint="#3F51B5"
+            android:layout_marginEnd="5dp"
             android:text="←"
             android:textColor="#FFFFFF"
             android:textSize="24sp"
+            app:backgroundTint="#3F51B5"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@+id/rightButton"
             app:layout_constraintHorizontal_bias="0.5"
@@ -102,10 +93,10 @@
             android:layout_height="60dp"
             android:layout_marginStart="2dp"
             android:layout_marginEnd="2dp"
-            app:backgroundTint="#3F51B5"
             android:text="→"
             android:textColor="#FFFFFF"
             android:textSize="24sp"
+            app:backgroundTint="#3F51B5"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@+id/downButton"
             app:layout_constraintHorizontal_bias="0.5"
@@ -118,10 +109,10 @@
             android:layout_height="60dp"
             android:layout_marginStart="2dp"
             android:layout_marginEnd="2dp"
-            app:backgroundTint="#F44336"
             android:text="↓"
             android:textColor="#FFFFFF"
             android:textSize="24sp"
+            app:backgroundTint="#3F50B4"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@+id/rotateButton"
             app:layout_constraintHorizontal_bias="0.5"
@@ -133,10 +124,10 @@
             android:layout_width="0dp"
             android:layout_height="60dp"
             android:layout_marginStart="2dp"
-            app:backgroundTint="#FF9800"
             android:text="↻"
             android:textColor="#FFFFFF"
             android:textSize="24sp"
+            app:backgroundTint="#D81B1B"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintHorizontal_bias="0.5"

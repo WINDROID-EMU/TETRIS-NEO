@@ -1,34 +1,137 @@
 package com.neo.tetris
 
 import android.graphics.Color
+import android.media.MediaPlayer
 import kotlin.random.Random
 
-class GameLogic {
+class GameLogic(private val context: android.content.Context) {
 
-    val gridWidth = 10
-    val gridHeight = 20
-    val blockSize = 85
+    private var breakSound: MediaPlayer? = null
+    private var lastScoreMilestone = 0 // Para rastrear a última marca de 200 pontos
+    private var lastSpeedMilestone = 0 // Para rastrear a última marca de 10.000 pontos
+    private val initialFallSpeed = 500L // Velocidade inicial para calcular aumentos
+    private val initialFastFallSpeed = 100L // Velocidade inicial rápida
+
+    val gridWidth = 13
+    val gridHeight = 22
+    val blockSize = 80
     val grid = Array(gridHeight) { IntArray(gridWidth) { Color.BLACK } }
     var currentPiece: Piece = createRandomPiece()
     var nextPiece: Piece = createRandomPiece()
     var lockedPositions = mutableMapOf<Pair<Int, Int>, Int>()
     var score = 0
     var fallTime = 0L
-    val fallSpeed = 500 // Tempo em milissegundos para a peça cair normalmente
-    val fastFallSpeed = 100 // Tempo em milissegundos para a peça cair quando o botão pra baixo está pressionado
+    private var fallSpeed = 500L // Velocidade base de queda (500ms)
+    private var fastFallSpeed = 100L // Velocidade de queda rápida (100ms)
+    private var currentSpeed = fallSpeed // Velocidade atual
+    private var isFastFalling = false // Controle de queda rápida
+    private var lastFallTime = 0L
+    private var level = 1
+    private var linesCleared = 0
     var isGameOver = false
-    var isFastFalling = false // Controla se a peça está em modo de queda rápida
+    private var isPaused = false
+    var mediaPlayer: MediaPlayer? = null
+    private var lastSoundPlayTime = 0L
+    private val SOUND_COOLDOWN = 200L // Cooldown de 200ms entre sons
 
-    fun update(deltaTime: Long) {
-        if (isGameOver) return
+    // Contém as diferentes formas das peças
+    private val shapes = listOf(
+        // Peça I
+        arrayOf(
+            intArrayOf(0, 0, 0, 0),
+            intArrayOf(1, 1, 1, 1),
+            intArrayOf(0, 0, 0, 0),
+            intArrayOf(0, 0, 0, 0)
+        ),
+        // Peça O
+        arrayOf(
+            intArrayOf(1, 1),
+            intArrayOf(1, 1)
+        ),
+        // Peça T
+        arrayOf(
+            intArrayOf(0, 1, 0),
+            intArrayOf(1, 1, 1),
+            intArrayOf(0, 0, 0)
+        ),
+        // Peça S
+        arrayOf(
+            intArrayOf(0, 1, 1),
+            intArrayOf(1, 1, 0),
+            intArrayOf(0, 0, 0)
+        ),
+        // Peça Z
+        arrayOf(
+            intArrayOf(1, 1, 0),
+            intArrayOf(0, 1, 1),
+            intArrayOf(0, 0, 0)
+        ),
+        // Peça J
+        arrayOf(
+            intArrayOf(1, 0, 0),
+            intArrayOf(1, 1, 1),
+            intArrayOf(0, 0, 0)
+        ),
+        // Peça L
+        arrayOf(
+            intArrayOf(0, 0, 1),
+            intArrayOf(1, 1, 1),
+            intArrayOf(0, 0, 0)
+        ),
+        // Peça Bomba (nova)
+        arrayOf(
+            intArrayOf(0, 1, 0),
+            intArrayOf(1, 1, 1),
+            intArrayOf(0, 1, 0)
+        )
+    )
+
+    // Cores correspondentes a cada peça
+    private val colors = listOf(
+        Color.CYAN,       // I - Ciano
+        Color.YELLOW,     // O - Amarelo
+        Color.MAGENTA,    // T - Magenta
+        Color.GREEN,      // S - Verde
+        Color.RED,        // Z - Vermelho
+        Color.BLUE,       // J - Azul
+        Color.rgb(255, 165, 0), // L - Laranja
+        Color.rgb(128, 0, 128)  // Bomba - Roxo escuro
+    )
+    
+    // Chance da peça bomba aparecer (1/10 = 10% de chance)
+    private val BOMB_CHANCE = 10
+    
+    // Métodos para configurar as velocidades
+    fun setFallSpeed(speed: Long) {
+        fallSpeed = speed
+        if (!isFastFalling) {
+            currentSpeed = fallSpeed
+        }
+    }
+    
+    fun setFastFallSpeed(speed: Long) {
+        fastFallSpeed = speed
+        if (isFastFalling) {
+            currentSpeed = fastFallSpeed
+        }
+    }
+    
+    // Métodos para obter as velocidades atuais
+    fun getFallSpeed(): Long {
+        return fallSpeed
+    }
+    
+    fun getFastFallSpeed(): Long {
+        return fastFallSpeed
+    }
+
+    fun update(elapsedTime: Long) {
+        if (isPaused || isGameOver) return
         
-        fallTime += deltaTime
-        
-        val currentSpeed = if (isFastFalling) fastFallSpeed else fallSpeed
-        
-        if (fallTime >= currentSpeed) {
-            fallTime = 0
-            movePieceDown()
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastFallTime >= currentSpeed) {
+            moveDown()
+            lastFallTime = currentTime
         }
     }
 
@@ -47,18 +150,20 @@ class GameLogic {
     // Ativa o modo de queda rápida
     fun startFastFall() {
         isFastFalling = true
+        currentSpeed = fastFallSpeed
     }
     
     // Desativa o modo de queda rápida
     fun stopFastFall() {
         isFastFalling = false
+        currentSpeed = fallSpeed
     }
 
     // Método modificado para fazer queda instantânea (hard drop)
     fun hardDrop() {
         while (validMove(currentPiece, 0, 1)) {
             currentPiece.y++
-            score += 2 // Mais pontos por queda direta
+            updateScore(2) // Mais pontos por queda direta
         }
         lockPiece()
         
@@ -108,7 +213,7 @@ class GameLogic {
         return rotated
     }
 
-    private fun movePieceDown() {
+    private fun moveDown() {
         if (validMove(currentPiece, 0, 1)) {
             currentPiece.y++
         } else {
@@ -151,7 +256,7 @@ class GameLogic {
         updateGrid()
         
         // Pontuar pela explosão
-        score += 150
+        updateScore(150)
     }
     
     // Método para atualizar a grade após uma explosão
@@ -177,20 +282,69 @@ class GameLogic {
         }
     }
 
+    private fun playBreakSound() {
+        try {
+            breakSound?.release()
+            breakSound = MediaPlayer.create(context, R.raw.break_sound)
+            // Ajustar o volume para 100% (1.0f)
+            breakSound?.setVolume(5.0f, 5.0f)
+            // Configurar para não repetir
+            breakSound?.isLooping = false
+            breakSound?.start()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun releaseResources() {
+        breakSound?.release()
+        breakSound = null
+    }
+
     private fun checkGameOver() {
+        // Verifica se a nova peça colide com alguma peça existente na posição inicial
         if (!validMove(currentPiece, 0, 0)) {
             isGameOver = true
+            return
+        }
+        
+        // Verifica se alguma peça atingiu o topo da tela (primeiras 2 linhas)
+        for (y in 0..1) {
+            for (x in 0 until gridWidth) {
+                if (grid[y][x] != Color.BLACK) {
+                    isGameOver = true
+                    return
+                }
+            }
         }
     }
 
     private fun lockPiece() {
+        // Adiciona cada bloco da peça atual às posições bloqueadas
         for ((y, row) in currentPiece.shape.withIndex()) {
             for ((x, cell) in row.withIndex()) {
                 if (cell == 1) {
-                    lockedPositions[Pair(currentPiece.x + x, currentPiece.y + y)] = currentPiece.color
+                    val gridY = currentPiece.y + y
+                    val gridX = currentPiece.x + x
+                    
+                    // Verificação adicional para game over
+                    if (gridY <= 1) {
+                        isGameOver = true
+                    }
+                    
+                    lockedPositions[Pair(gridX, gridY)] = currentPiece.color
                 }
             }
         }
+        
+        // Se for uma peça bomba, explodir blocos abaixo
+        if (currentPiece.isBomb) {
+            explodeBomb(currentPiece)
+        } else {
+            // Verifica se completou alguma linha
+            checkLines()
+        }
+        
         updateGrid()
     }
 
@@ -234,22 +388,29 @@ class GameLogic {
             
             // Pontuar baseado no número de linhas limpas de uma vez
             when (fullLines.size) {
-                1 -> score += 100
-                2 -> score += 300
-                3 -> score += 500
-                4 -> score += 800
+                1 -> updateScore(100)
+                2 -> updateScore(300)
+                3 -> updateScore(500)
+                4 -> updateScore(800)
             }
         }
     }
 
-    private fun validMove(piece: Piece, offsetX: Int, offsetY: Int): Boolean {
+    // Verifica se um movimento é válido
+    fun validMove(piece: Piece, offsetX: Int, offsetY: Int): Boolean {
         for ((y, row) in piece.shape.withIndex()) {
             for ((x, cell) in row.withIndex()) {
                 if (cell == 1) {
                     val newX = piece.x + x + offsetX
                     val newY = piece.y + y + offsetY
-                    if (newX < 0 || newX >= gridWidth || newY >= gridHeight || 
-                        (newY >= 0 && lockedPositions.containsKey(Pair(newX, newY)))) {
+                    
+                    // Verificar limites do tabuleiro
+                    if (newX < 0 || newX >= gridWidth || newY >= gridHeight) {
+                        return false
+                    }
+                    
+                    // Verificar colisão com outras peças
+                    if (newY >= 0 && grid[newY][newX] != Color.BLACK) {
                         return false
                     }
                 }
@@ -259,39 +420,130 @@ class GameLogic {
     }
 
     private fun createRandomPiece(): Piece {
-        // 20% de chance de criar uma peça bomba
-        if (Random.nextInt(100) < 20) {
-            // Peça bomba é um único bloco branco
-            val bombShape = listOf(listOf(1))
-            val startX = Random.nextInt(gridWidth)
-            return Piece(bombShape, Color.WHITE, startX, 0, true)
+        // Adicionar chance de criar uma peça bomba
+        val bombRoll = (1..BOMB_CHANCE).random()
+        val shapeIndex = if (bombRoll == 1) {
+            // Retorna a bomba (último índice)
+            shapes.size - 1
+        } else {
+            // Retorna uma peça normal (evitando a bomba)
+            (0 until shapes.size - 1).random()
         }
         
-        val shapes = listOf(
-            listOf(listOf(1, 1, 1, 1)),                         // I
-            listOf(listOf(1, 1), listOf(1, 1)),                 // O
-            listOf(listOf(0, 1, 0), listOf(1, 1, 1)),           // T
-            listOf(listOf(0, 1, 1), listOf(1, 1, 0)),           // S
-            listOf(listOf(1, 1, 0), listOf(0, 1, 1)),           // Z
-            listOf(listOf(1, 0, 0), listOf(1, 1, 1)),           // L
-            listOf(listOf(0, 0, 1), listOf(1, 1, 1))            // J
-        )
-        val colors = listOf(
-            Color.CYAN,
-            Color.YELLOW,
-            Color.MAGENTA,
-            Color.GREEN,
-            Color.RED,
-            Color.rgb(255, 165, 0), // Orange
-            Color.BLUE
-        )
+        val shape = shapes[shapeIndex]
+        val color = colors[shapeIndex]
         
-        val index = Random.nextInt(shapes.size)
-        val shape = shapes[index]
+        // Posicionar a peça no topo do grid, horizontalmente centralizada
+        val x = (gridWidth - shape[0].size) / 2
+        val y = 0
         
-        // Calcular posição inicial da peça para que ela apareça centralizada no topo
-        val startX = (gridWidth / 2) - (shape[0].size / 2)
+        return Piece(shape, color, x, y, shapeIndex == shapes.size - 1)
+    }
+
+    private fun updateScore(newPoints: Int) {
+        score += newPoints
         
-        return Piece(shape, colors[index], startX, 0)
+        // Verificar se passou de 200 pontos desde a última marca (para som)
+        if (score >= lastScoreMilestone + 200) {
+            lastScoreMilestone = score - (score % 200) // Arredonda para baixo para o múltiplo de 200 mais próximo
+            playBreakSound() // Toca o som quando atinge 200 pontos
+        }
+        
+        // Aumentar velocidade a cada 10.000 pontos (5% mais rápido)
+        if (score >= lastSpeedMilestone + 10000) {
+            lastSpeedMilestone = score - (score % 10000) // Arredonda para baixo para múltiplo de 10.000
+            
+            // Calcular novo fator de velocidade (cada 10.000 pontos = 5% mais rápido)
+            val speedIncreaseCount = lastSpeedMilestone / 10000
+            val speedFactor = 1.0f / (1.0f + (speedIncreaseCount * 0.05f))
+            
+            // Aplicar aos tempos de queda (tempo menor = queda mais rápida)
+            fallSpeed = (initialFallSpeed * speedFactor).toLong()
+            fastFallSpeed = (initialFastFallSpeed * speedFactor).toLong()
+            
+            // Atualizar velocidade atual
+            if (isFastFalling) {
+                currentSpeed = fastFallSpeed
+            } else {
+                currentSpeed = fallSpeed
+            }
+        }
+    }
+    
+    fun setPaused(paused: Boolean) {
+        isPaused = paused
+    }
+    
+    fun isPaused(): Boolean {
+        return isPaused
+    }
+
+    // Classe para representar uma peça
+    inner class Piece(
+        val shape: Array<IntArray>,
+        val color: Int,
+        var x: Int,
+        var y: Int,
+        val isBomb: Boolean = false // Indica se esta é uma peça bomba
+    ) {
+        fun rotate(): Array<IntArray> {
+            // Não rotacionar a peça 'O' (quadrado) nem a bomba
+            if (shape.size == 2 && shape[0].size == 2 || isBomb) return shape
+            
+            val n = shape.size
+            val rotated = Array(n) { IntArray(n) }
+            
+            for (i in 0 until n) {
+                for (j in 0 until n) {
+                    rotated[j][n - 1 - i] = shape[i][j]
+                }
+            }
+            return rotated
+        }
+    }
+    
+    private fun explodeBomb(piece: Piece) {
+        // Encontrar todos os blocos abaixo da peça bomba e explodir
+        val bottomY = piece.y + piece.shape.size - 1
+        
+        // Para cada coluna ocupada pela bomba
+        for (x in 0 until piece.shape[0].size) {
+            // Verificar se há um bloco da bomba nesta coluna
+            var hasBombBlock = false
+            
+            // Encontrar o bloco mais baixo da bomba em cada coluna
+            for (y in piece.shape.size - 1 downTo 0) {
+                if (piece.shape[y][x] == 1) {
+                    hasBombBlock = true
+                    
+                    // Explodir blocos abaixo desta posição
+                    val gridX = piece.x + x
+                    
+                    // Verificar se está dentro dos limites do grid
+                    if (gridX >= 0 && gridX < gridWidth) {
+                        // Explodir todos os blocos abaixo até o fundo
+                        for (gridY in (piece.y + y + 1) until gridHeight) {
+                            // Remover blocos bloqueados
+                            lockedPositions.remove(Pair(gridX, gridY))
+                            // Limpar a célula do grid
+                            grid[gridY][gridX] = Color.BLACK
+                        }
+                    }
+                    
+                    // Já encontramos o bloco mais baixo desta coluna, podemos sair do loop
+                    break
+                }
+            }
+        }
+        
+        // Atualizar score pela explosão (1 ponto por bloco na bomba)
+        val bombSize = piece.shape.sumBy { row -> row.sum() }
+        updateScore(bombSize * 3) // Pontuação extra pela bomba
+        
+        // Reproduzir som de explosão
+        playBreakSound()
+        
+        // Atualizar o grid
+        updateGrid()
     }
 }

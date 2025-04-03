@@ -123,21 +123,7 @@ class GameView(context: Context, private val gameLogic: GameLogic) : SurfaceView
             }
         }
 
-        // Desenhar peça atual
-        for ((y, row) in gameLogic.currentPiece.shape.withIndex()) {
-            for ((x, cell) in row.withIndex()) {
-                if (cell == 1) {
-                    paint.color = gameLogic.currentPiece.color
-                    canvas.drawRect(
-                        offsetX + (gameLogic.currentPiece.x + x) * gameLogic.blockSize.toFloat(),
-                        offsetY + (gameLogic.currentPiece.y + y) * gameLogic.blockSize.toFloat(),
-                        offsetX + (gameLogic.currentPiece.x + x + 1) * gameLogic.blockSize.toFloat(),
-                        offsetY + (gameLogic.currentPiece.y + y + 1) * gameLogic.blockSize.toFloat(),
-                        paint
-                    )
-                }
-            }
-        }
+        drawPiece(canvas)
 
         // Área para próxima peça
         val infoX = offsetX + gameLogic.gridWidth * gameLogic.blockSize + 20
@@ -186,5 +172,74 @@ class GameView(context: Context, private val gameLogic: GameLogic) : SurfaceView
                 }
             }
         }
+    }
+
+    private fun drawPiece(canvas: Canvas) {
+        val piece = gameLogic.currentPiece
+        if (piece != null) {
+            // Desenhar sombra da peça
+            val shadowPaint = Paint().apply {
+                color = Color.argb(50, 0, 0, 0) // Sombra com 20% de opacidade
+                style = Paint.Style.FILL
+            }
+            
+            // Calcular posição da sombra (onde a peça cairá)
+            var shadowY = piece.y
+            while (gameLogic.validMove(piece, 0, shadowY - piece.y + 1)) {
+                shadowY++
+            }
+            
+            // Desenhar sombra
+            for ((y, row) in piece.shape.withIndex()) {
+                for ((x, cell) in row.withIndex()) {
+                    if (cell == 1) {
+                        val screenX = offsetX + (piece.x + x) * gameLogic.blockSize.toFloat()
+                        val screenY = offsetY + (shadowY + y) * gameLogic.blockSize.toFloat()
+                        canvas.drawRect(
+                            screenX,
+                            screenY,
+                            screenX + gameLogic.blockSize.toFloat(),
+                            screenY + gameLogic.blockSize.toFloat(),
+                            shadowPaint
+                        )
+                    }
+                }
+            }
+            
+            // Desenhar peça atual
+            for ((y, row) in piece.shape.withIndex()) {
+                for ((x, cell) in row.withIndex()) {
+                    if (cell == 1) {
+                        val screenX = offsetX + (piece.x + x) * gameLogic.blockSize.toFloat()
+                        val screenY = offsetY + (piece.y + y) * gameLogic.blockSize.toFloat()
+                        drawBlock(canvas, screenX, screenY, piece.color)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun drawBlock(canvas: Canvas, x: Float, y: Float, color: Int) {
+        paint.color = color
+        paint.style = Paint.Style.FILL
+        canvas.drawRect(
+            x,
+            y,
+            x + gameLogic.blockSize.toFloat(),
+            y + gameLogic.blockSize.toFloat(),
+            paint
+        )
+        
+        // Adicionar borda para melhor visualização
+        paint.color = Color.argb(100, 255, 255, 255)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 2f
+        canvas.drawRect(
+            x,
+            y,
+            x + gameLogic.blockSize.toFloat(),
+            y + gameLogic.blockSize.toFloat(),
+            paint
+        )
     }
 }
