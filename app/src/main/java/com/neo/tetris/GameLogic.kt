@@ -37,10 +37,21 @@ class GameLogic(private val context: Context) {
     // Controle para animação de game over
     private var isPlayingGameOverAnimation = false
     private var gameOverAnimationRow = 0
-    private var gameOverAnimationDelay = 100L
+    private var gameOverAnimationDelay = 100L // tempo entre cada linha preenchida
+    private var gameOverAnimationTimer = 0L
     
     // Controle de quando o último som foi tocado
     private var lastScoreMilestone = 0
+    
+    // Cores para a animação de game over
+    private val gameOverColors = listOf(
+        Color.RED,
+        Color.BLUE,
+        Color.GREEN,
+        Color.YELLOW,
+        Color.MAGENTA,
+        Color.CYAN
+    )
     
     // Formas das peças
     private val shapes = arrayOf(
@@ -104,6 +115,11 @@ class GameLogic(private val context: Context) {
     )
 
     fun update(deltaTime: Long) {
+        // Durante a animação de game over, não atualizamos a lógica normal do jogo
+        if (isPlayingGameOverAnimation) {
+            return
+        }
+        
         if (isGameOver) return
         
         fallTime += deltaTime
@@ -276,6 +292,9 @@ class GameLogic(private val context: Context) {
     // Método para explodir a bomba e destruir blocos próximos
     private fun explodeBomb() {
         try {
+            // Verificar quais blocos serão destruídos para fazer som adequado
+            var blocosDestruidos = 0
+            
             // Para cada coluna ocupada pela bomba (que é apenas uma, pois é um único quadrado)
             for (y in 0 until currentPiece.shape.size) {
                 for (x in 0 until currentPiece.shape[0].size) {
@@ -288,18 +307,21 @@ class GameLogic(private val context: Context) {
                         if (gridX + 1 < gridWidth && lockedPositions.containsKey(Pair(gridX + 1, gridY))) {
                             lockedPositions.remove(Pair(gridX + 1, gridY))
                             grid[gridY][gridX + 1] = Color.BLACK
+                            blocosDestruidos++
                         }
                         
                         // Verificar e destruir bloco à esquerda
                         if (gridX - 1 >= 0 && lockedPositions.containsKey(Pair(gridX - 1, gridY))) {
                             lockedPositions.remove(Pair(gridX - 1, gridY))
                             grid[gridY][gridX - 1] = Color.BLACK
+                            blocosDestruidos++
                         }
                         
                         // Verificar e destruir bloco abaixo
                         if (gridY + 1 < gridHeight && lockedPositions.containsKey(Pair(gridX, gridY + 1))) {
                             lockedPositions.remove(Pair(gridX, gridY + 1))
                             grid[gridY + 1][gridX] = Color.BLACK
+                            blocosDestruidos++
                         }
                     }
                 }
@@ -307,6 +329,11 @@ class GameLogic(private val context: Context) {
             
             // Atualizar a grade
             updateGrid()
+            
+            // Fazer com que blocos flutuantes caiam
+            if (blocosDestruidos > 0) {
+                updateAfterExplosion(lockedPositions.keys.toList())
+            }
             
             // Pontuar pela explosão
             updateScore(100) // 100 pontos de bônus por usar a bomba (aumentado por destruir mais blocos)
@@ -330,32 +357,90 @@ class GameLogic(private val context: Context) {
         }
     }
     
-    // Método para atualizar a grade após uma explosão
-    private fun updateAfterExplosion() {
-        // Para cada coluna, verificamos de baixo para cima
-        for (x in 0 until gridWidth) {
-            // Lista de posições vazias em cada coluna
-            val emptySpaces = mutableListOf<Int>()
+    // Método para atualizar a grade após uma explosão - fazer os blocos flutuantes caírem
+    private fun updateAfterExplosion(destroyedPositions: List<Pair<Int, Int>>) {
+        var mudancasFeitas = true
+        var blocosCairam = false
+        
+        // Repetir o processo até que nenhum bloco possa mais cair
+        while (mudancasFeitas) {
+            mudancasFeitas = false
+            var distanciaMaxima = 0
             
-            // Encontrar espaços vazios de baixo para cima
-            for (y in gridHeight-1 downTo 0) {
-                if (!lockedPositions.containsKey(Pair(x, y))) {
-                    emptySpaces.add(y)
-                } else if (emptySpaces.isNotEmpty()) {
-                    // Se há espaços vazios abaixo desta posição, move o bloco para baixo
-                    val lowestEmptyY = emptySpaces.removeAt(0)
-                    val color = lockedPositions.remove(Pair(x, y))!!
-                    lockedPositions[Pair(x, lowestEmptyY)] = color
-                    emptySpaces.add(y) // Agora esta posição está vazia
-                    emptySpaces.sort() // Reordenar para que o próximo espaço vazio seja o mais baixo
+            // Processar apenas as colunas afetadas
+            val affectedColumns = destroyedPositions.map { it.first }.distinct()
+            
+            for (x in affectedColumns) {
+                // Começamos da penúltima linha de baixo para cima
+                for (y in gridHeight - 2 downTo 0) {
+                    // Se há um bloco nesta posição
+                    if (lockedPositions.containsKey(Pair(x, y))) {
+                        // Calcular quantas posições ele pode cair
+                        var distancia = 0
+                        var posicaoY = y + 1
+                        
+                        // Verificar quantas posições vazias existem abaixo
+                        while (posicaoY < gridHeight && !lockedPositions.containsKey(Pair(x, posicaoY))) {
+                            distancia++
+                            posicaoY++
+                        }
+                        
+                        // Se pode cair pelo menos uma posição
+                        if (distancia > 0) {
+                            // Registrar a maior distância para efeitos visuais
+                            if (distancia > distanciaMaxima) {
+                                distanciaMaxima = distancia
+                            }
+                            
+                            // Mover o bloco para baixo pela distância calculada
+                            val color = lockedPositions.remove(Pair(x, y))!!
+                            lockedPositions[Pair(x, y + distancia)] = color
+                            mudancasFeitas = true
+                            blocosCairam = true
+                        }
+                    }
                 }
             }
+            
+            // Atualizar a grade após cada iteração
+            if (mudancasFeitas) {
+                updateGrid()
+                
+                // Pequeno delay para visualização da queda (quanto maior a distância, maior o delay)
+                try {
+                    Thread.sleep((50 + (distanciaMaxima * 10)).toLong())
+                } catch (e: Exception) {
+                    // Ignorar erros de interrupção
+                }
+            }
+        }
+        
+        // Tocar som de queda se algum bloco caiu
+        if (blocosCairam) {
+            playCrashSound()
+        }
+    }
+    
+    // Método para tocar som de peças caindo e batendo
+    private fun playCrashSound() {
+        try {
+            // Buscar o som de colapso (ou usar o som de break como fallback)
+            val resourceId = context.resources.getIdentifier("break_sound", "raw", context.packageName)
+            if (resourceId != 0) {
+                val crashSound = MediaPlayer.create(context, resourceId)
+                crashSound?.setVolume(0.7f, 0.7f) // Volume um pouco mais baixo
+                crashSound?.setOnCompletionListener { it.release() }
+                crashSound?.start()
+            }
+        } catch (e: Exception) {
+            Log.e("GameLogic", "Erro ao tocar som de colapso: ${e.message}")
         }
     }
 
     private fun checkGameOver() {
         if (!validMove(currentPiece, 0, 0)) {
             isGameOver = true
+            Log.d("GameLogic", "Game Over")
         }
     }
 
@@ -407,6 +492,9 @@ class GameLogic(private val context: Context) {
             }
             
             updateGrid()
+            
+            // Verificar se há peças flutuantes após limpar as linhas
+            updateAfterExplosion(lockedPositions.keys.toList())
             
             // Pontuar baseado no número de linhas limpas de uma vez
             when (fullLines.size) {
@@ -511,84 +599,66 @@ class GameLogic(private val context: Context) {
         }
     }
     
-    fun startGameOverAnimation(callback: () -> Unit) {
-        if (isGameOver && !isPlayingGameOverAnimation) {
-            isPlayingGameOverAnimation = true
-            gameOverAnimationRow = gridHeight - 1
-            
-            // Tocar som de game over
-            playGameOverSound()
-            
-            // Iniciar a animação
-            Thread {
-                try {
-                    while (gameOverAnimationRow >= 0) {
-                        // Preencher a linha atual com blocos pretos
-                        fillRow(gameOverAnimationRow)
-                        
-                        // Atualizar a linha para a próxima iteração
-                        gameOverAnimationRow--
-                        
-                        // Esperar pelo delay de animação
-                        Thread.sleep(gameOverAnimationDelay)
-                    }
-                    
-                    // Animação completa, chamar o callback
-                    isPlayingGameOverAnimation = false
-                    callback()
-                } catch (e: Exception) {
-                    Log.e("GameLogic", "Erro na animação de game over: ${e.message}")
-                    isPlayingGameOverAnimation = false
-                }
-            }.start()
-        } else {
-            // Se não estivermos em estado de game over ou a animação já estiver rodando,
-            // apenas chame o callback diretamente
-            callback()
-        }
-    }
-    
-    private fun fillRow(row: Int) {
-        if (row < 0 || row >= gridHeight) return
+    // Método para iniciar a animação de game over
+    fun startGameOverAnimation(onAnimationComplete: () -> Unit) {
+        if (isPlayingGameOverAnimation) return
         
-        // Cores aleatórias para os blocos
-        val colors = listOf(
-            Color.RED, Color.GREEN, Color.BLUE, 
-            Color.YELLOW, Color.CYAN, Color.MAGENTA
-        )
+        isPlayingGameOverAnimation = true
+        gameOverAnimationRow = gridHeight - 1 // Começa da linha de baixo
+        gameOverAnimationTimer = 0L
         
-        // Preencher a linha com blocos coloridos aleatórios
-        for (x in 0 until gridWidth) {
-            val color = colors[Random.nextInt(colors.size)]
-            grid[row][x] = color
-            lockedPositions[Pair(x, row)] = color
-        }
-    }
-    
-    private fun playGameOverSound() {
+        // Reproduzir som de game over
         try {
-            // Liberar MediaPlayer anterior se existir
-            gameOverSound?.release()
-            
-            // Criar um novo MediaPlayer para o som de game over
+            // Usar o arquivo gameover.mp3 que existe na pasta raw
             gameOverSound = MediaPlayer.create(context, R.raw.gameover)
-            
-            // Configurar volume para 100%
-            gameOverSound?.setVolume(1.0f, 1.0f)
-            
-            // Configurar para não repetir
-            gameOverSound?.isLooping = false
-            
-            // Tocar o som
+            gameOverSound?.setOnCompletionListener {
+                it.release()
+                Log.d("GameLogic", "Som de game over finalizado")
+            }
             gameOverSound?.start()
-            
-            Log.d("GameLogic", "Som de game over tocado")
         } catch (e: Exception) {
             Log.e("GameLogic", "Erro ao tocar som de game over: ${e.message}")
-            e.printStackTrace()
         }
+        
+        // Iniciar thread para animação
+        Thread {
+            try {
+                // Esperar para sincronizar com o som
+                Thread.sleep(200)
+                
+                // Preencher o grid linha por linha, de baixo para cima
+                while (gameOverAnimationRow >= 0) {
+                    // Preencher a linha atual com blocos coloridos
+                    for (x in 0 until gridWidth) {
+                        val randomColor = gameOverColors[Random.nextInt(gameOverColors.size)]
+                        grid[gameOverAnimationRow][x] = randomColor
+                    }
+                    
+                    // Avançar para a próxima linha (de baixo para cima)
+                    gameOverAnimationRow--
+                    
+                    // Esperar o delay para a próxima linha
+                    Thread.sleep(gameOverAnimationDelay)
+                }
+                
+                // Esperar um pouco após preencher todo o grid
+                Thread.sleep(500)
+                
+                // Indicar que a animação terminou
+                isPlayingGameOverAnimation = false
+                
+                // Chamar o callback quando a animação terminar
+                onAnimationComplete()
+                
+            } catch (e: Exception) {
+                Log.e("GameLogic", "Erro na animação de game over: ${e.message}")
+                isPlayingGameOverAnimation = false
+                onAnimationComplete()
+            }
+        }.start()
     }
     
+    // Método para verificar se a animação de game over está em andamento
     fun isGameOverAnimationPlaying(): Boolean {
         return isPlayingGameOverAnimation
     }

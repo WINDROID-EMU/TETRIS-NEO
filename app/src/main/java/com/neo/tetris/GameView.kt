@@ -133,22 +133,25 @@ class GameView(context: Context, private val gameLogic: GameLogic) : SurfaceView
             }
         }
 
-        drawPiece(canvas)
+        // Não desenhar a peça atual durante a animação de game over
+        if (!gameLogic.isGameOverAnimationPlaying()) {
+            drawPiece(canvas)
+        }
 
         // Área para próxima peça
         val infoX = offsetX + gameLogic.gridWidth * gameLogic.blockSize + 20
         val infoWidth = screenWidth - infoX
         
-        // Desenhar próxima peça somente se houver espaço suficiente
-        if (infoWidth >= gameLogic.blockSize * 4) {
+        // Desenhar próxima peça somente se houver espaço suficiente e não estiver em animação de game over
+        if (infoWidth >= gameLogic.blockSize * 4 && !gameLogic.isGameOverAnimationPlaying()) {
             // Desenhar "Próxima:" no mesmo nível da pontuação (y=50f)
             paint.color = Color.WHITE
-            paint.textSize = 40f
+            paint.textSize = 80f
             paint.textAlign = Paint.Align.LEFT
-            canvas.drawText("Próxima:", infoX, 40f, paint)
+            canvas.drawText("Próxima:", infoX, 80f, paint)
             
             // Calcular a largura do texto "Próxima:" para dar espaço adequado
-            val textWidth = paint.measureText("Próxima:") + 40 // 50 pixels de espaço
+            val textWidth = paint.measureText("Próxima:") + 80 // 50 pixels de espaço
             
             // Desenhar a próxima peça ao lado do texto, no mesmo nível
             for ((y, row) in gameLogic.nextPiece.shape.withIndex()) {
@@ -165,7 +168,7 @@ class GameView(context: Context, private val gameLogic: GameLogic) : SurfaceView
                     }
                 }
             }
-        } else {
+        } else if (!gameLogic.isGameOverAnimationPlaying()) {
             // Se não houver espaço à direita, desenhe a próxima peça no topo
             paint.color = Color.WHITE
             paint.textSize = 30f
@@ -188,6 +191,20 @@ class GameView(context: Context, private val gameLogic: GameLogic) : SurfaceView
                         )
                     }
                 }
+            }
+        }
+        
+        // Se estiver em animação de game over, desenhar texto "GAME OVER" piscando
+        if (gameLogic.isGameOverAnimationPlaying()) {
+            // Fazer o texto piscar na animação
+            val time = System.currentTimeMillis() % 1000
+            if (time < 500) {
+                paint.color = Color.RED
+                paint.textSize = 80f
+                paint.textAlign = Paint.Align.CENTER
+                paint.isFakeBoldText = true
+                canvas.drawText("GAME OVER", screenWidth / 2f, screenHeight / 2f, paint)
+                paint.isFakeBoldText = false
             }
         }
     }
