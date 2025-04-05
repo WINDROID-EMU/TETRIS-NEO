@@ -17,13 +17,27 @@ class GameLogic(private val context: Context) {
     var lockedPositions = mutableMapOf<Pair<Int, Int>, Int>()
     var score = 0
     var fallTime = 0L
-    val fallSpeed = 500 // Tempo em milissegundos para a peça cair normalmente
+    var fallSpeed = 500 // Alterado para var para poder ser modificado
     val fastFallSpeed = 100 // Tempo em milissegundos para a peça cair quando o botão pra baixo está pressionado
     var isGameOver = false
     var isFastFalling = false // Controla se a peça está em modo de queda rápida
     
+    // Controle de aumento de velocidade
+    private var lastSpeedUpMilestone = 0
+    private val speedUpInterval = 10000 // A cada 10.000 pontos
+    private val speedUpPercentage = 0.95f // Reduz o tempo em 5% (95% do tempo original)
+    var showSpeedUpMessage = false
+    var speedUpMessageTimer = 0L
+    
     // MediaPlayer para sons
     private var pontosSound: MediaPlayer? = null
+    private var gameOverSound: MediaPlayer? = null
+    private var speedUpSound: MediaPlayer? = null
+    
+    // Controle para animação de game over
+    private var isPlayingGameOverAnimation = false
+    private var gameOverAnimationRow = 0
+    private var gameOverAnimationDelay = 100L
     
     // Controle de quando o último som foi tocado
     private var lastScoreMilestone = 0
@@ -94,6 +108,15 @@ class GameLogic(private val context: Context) {
         
         fallTime += deltaTime
         
+        // Atualizar o timer da mensagem de speed up
+        if (showSpeedUpMessage) {
+            speedUpMessageTimer += deltaTime
+            if (speedUpMessageTimer >= 3000) { // 3 segundos
+                showSpeedUpMessage = false
+                speedUpMessageTimer = 0
+            }
+        }
+        
         val currentSpeed = if (isFastFalling) fastFallSpeed else fallSpeed
         
         if (fallTime >= currentSpeed) {
@@ -130,14 +153,22 @@ class GameLogic(private val context: Context) {
             currentPiece.y++
             updateScore(2) // Mais pontos por queda direta
         }
-        lockPiece()
         
-        // Se for uma peça bomba, ative sua explosão
+        // Verificar se a peça atual é uma bomba
         if (currentPiece.isBomb) {
+            // Se a bomba está tocando em outra peça ou no chão, ativa a explosão
             explodeBomb()
-        } else {
-            clearLines()
+            
+            // Após a explosão, prosseguir com nova peça
+            currentPiece = nextPiece
+            nextPiece = createRandomPiece()
+            checkGameOver()
+            return
         }
+        
+        // Comportamento normal para outras peças
+        lockPiece()
+        clearLines()
         
         currentPiece = nextPiece
         nextPiece = createRandomPiece()
@@ -182,14 +213,21 @@ class GameLogic(private val context: Context) {
         if (validMove(currentPiece, 0, 1)) {
             currentPiece.y++
         } else {
-            lockPiece()
-            
-            // Se for uma peça bomba, ative sua explosão
+            // Verificar se a peça atual é uma bomba
             if (currentPiece.isBomb) {
+                // Se a bomba está tocando em outra peça ou no chão, ativa a explosão
                 explodeBomb()
-            } else {
-                clearLines()
+                
+                // Após a explosão, prosseguir com nova peça
+                currentPiece = nextPiece
+                nextPiece = createRandomPiece()
+                checkGameOver()
+                return
             }
+            
+            // Comportamento normal para outras peças
+            lockPiece()
+            clearLines()
             
             currentPiece = nextPiece
             nextPiece = createRandomPiece()
@@ -197,31 +235,99 @@ class GameLogic(private val context: Context) {
         }
     }
     
-    // Método para explodir a bomba e destruir blocos próximos
-    private fun explodeBomb() {
-        // Área de explosão: 3x3 com centro na posição base da bomba
-        val bombX = currentPiece.x
-        val bombY = currentPiece.y
-        
-        // Remover blocos em uma área 3x3
-        for (y in bombY-1..bombY+1) {
-            for (x in bombX-1..bombX+1) {
-                // Verificar se está dentro dos limites da grade
-                if (x in 0 until gridWidth && y in 0 until gridHeight) {
-                    // Remover o bloco
-                    lockedPositions.remove(Pair(x, y))
+    // Verifica se a peça bomba está na linha inferior da grade
+    private fun isBottomRow(): Boolean {
+        // Encontrar o bloco mais baixo da peça
+        var lowestY = 0
+        for ((y, row) in currentPiece.shape.withIndex()) {
+            for ((x, cell) in row.withIndex()) {
+                if (cell == 1 && y > lowestY) {
+                    lowestY = y
                 }
             }
         }
         
-        // Agora precisamos fazer as peças caírem após a explosão
-        updateAfterExplosion()
-        
-        // Atualizar a grade
-        updateGrid()
-        
-        // Pontuar pela explosão
-        updateScore(150)
+        // Verificar se o bloco mais baixo está na última linha da grade
+        return currentPiece.y + lowestY == gridHeight - 1
+    }
+    
+    // Verifica se a peça está tocando outra peça por baixo
+    private fun isTouchingPiece(): Boolean {
+        for ((y, row) in currentPiece.shape.withIndex()) {
+            for ((x, cell) in row.withIndex()) {
+                if (cell == 1) {
+                    // Verificar se há uma peça imediatamente abaixo
+                    val checkX = currentPiece.x + x
+                    val checkY = currentPiece.y + y + 1
+                    
+                    // Se estiver dentro dos limites da grade
+                    if (checkX >= 0 && checkX < gridWidth && checkY < gridHeight) {
+                        // Se a posição abaixo já estiver ocupada por outra peça
+                        if (lockedPositions.containsKey(Pair(checkX, checkY))) {
+                            return true
+                        }
+                    }
+                }
+            }
+        }
+        return false
+    }
+    
+    // Método para explodir a bomba e destruir blocos próximos
+    private fun explodeBomb() {
+        try {
+            // Para cada coluna ocupada pela bomba (que é apenas uma, pois é um único quadrado)
+            for (y in 0 until currentPiece.shape.size) {
+                for (x in 0 until currentPiece.shape[0].size) {
+                    if (currentPiece.shape[y][x] == 1) {
+                        // Posição da bomba na grade
+                        val gridX = currentPiece.x + x
+                        val gridY = currentPiece.y + y
+                        
+                        // Verificar e destruir bloco à direita
+                        if (gridX + 1 < gridWidth && lockedPositions.containsKey(Pair(gridX + 1, gridY))) {
+                            lockedPositions.remove(Pair(gridX + 1, gridY))
+                            grid[gridY][gridX + 1] = Color.BLACK
+                        }
+                        
+                        // Verificar e destruir bloco à esquerda
+                        if (gridX - 1 >= 0 && lockedPositions.containsKey(Pair(gridX - 1, gridY))) {
+                            lockedPositions.remove(Pair(gridX - 1, gridY))
+                            grid[gridY][gridX - 1] = Color.BLACK
+                        }
+                        
+                        // Verificar e destruir bloco abaixo
+                        if (gridY + 1 < gridHeight && lockedPositions.containsKey(Pair(gridX, gridY + 1))) {
+                            lockedPositions.remove(Pair(gridX, gridY + 1))
+                            grid[gridY + 1][gridX] = Color.BLACK
+                        }
+                    }
+                }
+            }
+            
+            // Atualizar a grade
+            updateGrid()
+            
+            // Pontuar pela explosão
+            updateScore(100) // 100 pontos de bônus por usar a bomba (aumentado por destruir mais blocos)
+            
+            // Reproduzir som de explosão se tiver algum
+            try {
+                val resourceId = context.resources.getIdentifier("break_sound", "raw", context.packageName)
+                if (resourceId != 0) {
+                    val explosionSound = MediaPlayer.create(context, resourceId)
+                    explosionSound?.setVolume(1.0f, 1.0f)
+                    explosionSound?.setOnCompletionListener { it.release() }
+                    explosionSound?.start()
+                }
+            } catch (e: Exception) {
+                Log.e("GameLogic", "Erro ao tocar som de explosão: ${e.message}")
+            }
+            
+            Log.d("GameLogic", "Bomba explodiu destruindo blocos adjacentes")
+        } catch (e: Exception) {
+            Log.e("GameLogic", "Erro na explosão da bomba: ${e.message}")
+        }
     }
     
     // Método para atualizar a grade após uma explosão
@@ -312,7 +418,7 @@ class GameLogic(private val context: Context) {
         }
     }
 
-    private fun validMove(piece: Piece, offsetX: Int, offsetY: Int): Boolean {
+    fun validMove(piece: Piece, offsetX: Int, offsetY: Int): Boolean {
         for ((y, row) in piece.shape.withIndex()) {
             for ((x, cell) in row.withIndex()) {
                 if (cell == 1) {
@@ -331,7 +437,7 @@ class GameLogic(private val context: Context) {
     private fun createRandomPiece(): Piece {
         // 20% de chance de criar uma peça bomba
         if (Random.nextInt(100) < 20) {
-            // Peça bomba é um único bloco branco
+            // Peça bomba como um único quadrado branco
             val bombShape = listOf(listOf(1))
             val startX = Random.nextInt(gridWidth)
             return Piece(bombShape, Color.WHITE, startX, 0, true)
@@ -368,10 +474,16 @@ class GameLogic(private val context: Context) {
     private fun updateScore(newPoints: Int) {
         score += newPoints
         
-        // Verificar se passou de 200 pontos desde a última marca
+        // Verificar se passou de 200 pontos desde a última marca para som de pontuação
         if (score >= lastScoreMilestone + 200) {
             lastScoreMilestone = score - (score % 200) // Arredonda para baixo para o múltiplo de 200 mais próximo
             playPontosSound() // Toca o som quando atinge 200 pontos
+        }
+        
+        // Verificar se passou de 10.000 pontos desde a última marca para aumento de velocidade
+        if (score >= lastSpeedUpMilestone + speedUpInterval) {
+            lastSpeedUpMilestone = score - (score % speedUpInterval) // Arredonda para baixo para o múltiplo de 10000 mais próximo
+            increaseSpeed() // Aumenta a velocidade
         }
     }
     
@@ -399,9 +511,148 @@ class GameLogic(private val context: Context) {
         }
     }
     
+    fun startGameOverAnimation(callback: () -> Unit) {
+        if (isGameOver && !isPlayingGameOverAnimation) {
+            isPlayingGameOverAnimation = true
+            gameOverAnimationRow = gridHeight - 1
+            
+            // Tocar som de game over
+            playGameOverSound()
+            
+            // Iniciar a animação
+            Thread {
+                try {
+                    while (gameOverAnimationRow >= 0) {
+                        // Preencher a linha atual com blocos pretos
+                        fillRow(gameOverAnimationRow)
+                        
+                        // Atualizar a linha para a próxima iteração
+                        gameOverAnimationRow--
+                        
+                        // Esperar pelo delay de animação
+                        Thread.sleep(gameOverAnimationDelay)
+                    }
+                    
+                    // Animação completa, chamar o callback
+                    isPlayingGameOverAnimation = false
+                    callback()
+                } catch (e: Exception) {
+                    Log.e("GameLogic", "Erro na animação de game over: ${e.message}")
+                    isPlayingGameOverAnimation = false
+                }
+            }.start()
+        } else {
+            // Se não estivermos em estado de game over ou a animação já estiver rodando,
+            // apenas chame o callback diretamente
+            callback()
+        }
+    }
+    
+    private fun fillRow(row: Int) {
+        if (row < 0 || row >= gridHeight) return
+        
+        // Cores aleatórias para os blocos
+        val colors = listOf(
+            Color.RED, Color.GREEN, Color.BLUE, 
+            Color.YELLOW, Color.CYAN, Color.MAGENTA
+        )
+        
+        // Preencher a linha com blocos coloridos aleatórios
+        for (x in 0 until gridWidth) {
+            val color = colors[Random.nextInt(colors.size)]
+            grid[row][x] = color
+            lockedPositions[Pair(x, row)] = color
+        }
+    }
+    
+    private fun playGameOverSound() {
+        try {
+            // Liberar MediaPlayer anterior se existir
+            gameOverSound?.release()
+            
+            // Criar um novo MediaPlayer para o som de game over
+            gameOverSound = MediaPlayer.create(context, R.raw.gameover)
+            
+            // Configurar volume para 100%
+            gameOverSound?.setVolume(1.0f, 1.0f)
+            
+            // Configurar para não repetir
+            gameOverSound?.isLooping = false
+            
+            // Tocar o som
+            gameOverSound?.start()
+            
+            Log.d("GameLogic", "Som de game over tocado")
+        } catch (e: Exception) {
+            Log.e("GameLogic", "Erro ao tocar som de game over: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+    
+    fun isGameOverAnimationPlaying(): Boolean {
+        return isPlayingGameOverAnimation
+    }
+    
+    // Método para aumentar a velocidade do jogo
+    private fun increaseSpeed() {
+        try {
+            // Aumentar velocidade em 5% (reduzir o tempo)
+            fallSpeed = (fallSpeed * speedUpPercentage).toInt()
+            
+            // Mostrar mensagem por 3 segundos
+            showSpeedUpMessage = true
+            speedUpMessageTimer = 0
+            
+            // Tocar som de aumento de velocidade
+            playSpeedUpSound()
+            
+            Log.d("GameLogic", "Velocidade aumentada para: $fallSpeed ms")
+        } catch (e: Exception) {
+            Log.e("GameLogic", "Erro ao aumentar velocidade: ${e.message}")
+        }
+    }
+    
+    // Método para tocar o som de aumento de velocidade
+    private fun playSpeedUpSound() {
+        try {
+            // Liberar MediaPlayer anterior se existir
+            speedUpSound?.release()
+            
+            // Tentar usar som específico para speed up, ou usar som de pontuação como fallback
+            val resourceId = context.resources.getIdentifier("speed_up", "raw", context.packageName)
+            
+            // Se não houver som específico, usar o som de pontuação
+            speedUpSound = if (resourceId != 0) {
+                MediaPlayer.create(context, resourceId)
+            } else {
+                MediaPlayer.create(context, R.raw.pontos_sound)
+            }
+            
+            // Configurar volume para 100%
+            speedUpSound?.setVolume(1.0f, 1.0f)
+            
+            // Configurar para não repetir
+            speedUpSound?.isLooping = false
+            
+            // Tocar o som
+            speedUpSound?.start()
+            
+            Log.d("GameLogic", "Som de speed up tocado")
+        } catch (e: Exception) {
+            Log.e("GameLogic", "Erro ao tocar som de speed up: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+    
     fun releaseResources() {
         // Liberar recursos ao fechar o jogo
         pontosSound?.release()
         pontosSound = null
+        
+        gameOverSound?.release()
+        gameOverSound = null
+        
+        speedUpSound?.release()
+        speedUpSound = null
     }
 }

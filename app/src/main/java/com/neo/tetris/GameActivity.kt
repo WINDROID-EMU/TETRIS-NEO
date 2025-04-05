@@ -8,6 +8,8 @@ import android.os.Bundle
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
+import android.widget.Button
+import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -23,6 +25,10 @@ class GameActivity : AppCompatActivity() {
     private var isPaused = false
     private var mediaPlayer: MediaPlayer? = null
     private lateinit var sharedPref: SharedPreferences
+    
+    // Controle para movimento contínuo
+    private var moveJob: kotlinx.coroutines.Job? = null
+    private val moveDelay = 100L // Tempo em milissegundos entre movimentos
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,6 +72,10 @@ class GameActivity : AppCompatActivity() {
             while (true) {
                 delay(1000)
                 if (gameLogic.isGameOver && !isPaused) {
+                    // Parar qualquer movimento contínuo
+                    stopContinuousMove()
+                    
+                    // Mostrar o diálogo de game over
                     showGameOverDialog()
                     break
                 }
@@ -91,21 +101,49 @@ class GameActivity : AppCompatActivity() {
     
     private fun setupControls() {
         try {
-            // Configurar botões de controle direcional
-            binding.leftButton.setOnClickListener {
+            // Configurar botões de controle direcional com movimentação contínua
+            binding.leftButton.setOnTouchListener { _, event ->
                 try {
-                    if (!isPaused) gameLogic.moveLeft()
+                    if (!isPaused) {
+                        when (event.action) {
+                            MotionEvent.ACTION_DOWN -> {
+                                // Inicia a movimentação contínua para esquerda
+                                startContinuousMove("left")
+                                return@setOnTouchListener true
+                            }
+                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                // Para a movimentação contínua
+                                stopContinuousMove()
+                                return@setOnTouchListener true
+                            }
+                        }
+                    }
                 } catch (e: Exception) {
-                    Log.e("GameActivity", "Erro no botão esquerdo: ${e.message}")
+                    Log.e("GameActivity", "Erro no touch do botão esquerdo: ${e.message}")
                 }
+                return@setOnTouchListener false
             }
             
-            binding.rightButton.setOnClickListener {
+            binding.rightButton.setOnTouchListener { _, event ->
                 try {
-                    if (!isPaused) gameLogic.moveRight()
+                    if (!isPaused) {
+                        when (event.action) {
+                            MotionEvent.ACTION_DOWN -> {
+                                // Inicia a movimentação contínua para direita
+                                startContinuousMove("right")
+                                return@setOnTouchListener true
+                            }
+                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                // Para a movimentação contínua
+                                stopContinuousMove()
+                                return@setOnTouchListener true
+                            }
+                        }
+                    }
                 } catch (e: Exception) {
-                    Log.e("GameActivity", "Erro no botão direito: ${e.message}")
+                    Log.e("GameActivity", "Erro no touch do botão direito: ${e.message}")
                 }
+                return@setOnTouchListener false
             }
             
             // Configuração para queda gradativa quando o botão para baixo é pressionado
@@ -198,6 +236,29 @@ class GameActivity : AppCompatActivity() {
         }
     }
     
+    private fun startContinuousMove(direction: String) {
+        // Primeiro cancelamos qualquer job em andamento
+        stopContinuousMove()
+        
+        // Iniciamos um novo job para movimento contínuo
+        moveJob = lifecycleScope.launch {
+            while (true) {
+                if (!isPaused) {
+                    when (direction) {
+                        "left" -> gameLogic.moveLeft()
+                        "right" -> gameLogic.moveRight()
+                    }
+                }
+                delay(moveDelay)
+            }
+        }
+    }
+    
+    private fun stopContinuousMove() {
+        moveJob?.cancel()
+        moveJob = null
+    }
+    
     private fun togglePause() {
         try {
             Log.d("GameActivity", "togglePause - Alterando estado de ${if(isPaused) "PAUSADO" else "EM EXECUÇÃO"}")
@@ -274,30 +335,99 @@ class GameActivity : AppCompatActivity() {
                 gameView.pauseGame()
             }
             
-            // Verificar e salvar pontuação mais alta
-            val currentHighScore = sharedPref.getInt("high_score", 0)
-            if (gameLogic.score > currentHighScore) {
-                sharedPref.edit().putInt("high_score", gameLogic.score).apply()
+            // Iniciar a animação de game over
+            gameLogic.startGameOverAnimation {
+                // Este bloco é executado após a animação terminar
+                runOnUiThread {
+                    try {
+                        // Verificar e salvar pontuação mais alta
+                        val currentHighScore = sharedPref.getInt("high_score", 0)
+                        if (gameLogic.score > currentHighScore) {
+                            sharedPref.edit().putInt("high_score", gameLogic.score).apply()
+                        }
+                        
+                        // Inflar o layout personalizado
+                        val gameOverView = layoutInflater.inflate(R.layout.game_over_layout, null)
+                        
+                        // Configurar os textos de pontuação
+                        val scoreText = gameOverView.findViewById<TextView>(R.id.scoreText)
+                        val highScoreText = gameOverView.findViewById<TextView>(R.id.highScoreText)
+                        scoreText.text = "Pontuação: ${gameLogic.score}"
+                        highScoreText.text = "Recorde: ${Math.max(currentHighScore, gameLogic.score)}"
+                        
+                        // Configurar os botões
+                        val playAgainButton = gameOverView.findViewById<Button>(R.id.playAgainButton)
+                        val mainMenuButton = gameOverView.findViewById<Button>(R.id.mainMenuButton)
+                        
+                        // Criar o diálogo com o layout personalizado
+                        val builder = AlertDialog.Builder(this)
+                        builder.setView(gameOverView)
+                        builder.setCancelable(false)
+                        
+                        val dialog = builder.create()
+                        
+                        // Remover fundo/bordas brancas do diálogo
+                        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+                        
+                        dialog.show()
+                        
+                        // Configurar ações dos botões
+                        playAgainButton.setOnClickListener {
+                            dialog.dismiss()
+                            recreate()
+                        }
+                        
+                        mainMenuButton.setOnClickListener {
+                            dialog.dismiss()
+                            resetGame()
+                        }
+                    } catch (e: Exception) {
+                        Log.e("GameActivity", "Erro ao mostrar diálogo de Game Over: ${e.message}")
+                        e.printStackTrace()
+                        
+                        // Fallback para o diálogo simples em caso de erro
+                        val simpleBuilder = AlertDialog.Builder(this)
+                        simpleBuilder.setTitle("Game Over")
+                        simpleBuilder.setMessage("Sua pontuação: ${gameLogic.score}")
+                        simpleBuilder.setPositiveButton("Menu Principal") { _, _ ->
+                            resetGame()
+                        }
+                        simpleBuilder.setNegativeButton("Jogar Novamente") { _, _ ->
+                            recreate()
+                        }
+                        simpleBuilder.setCancelable(false)
+                        simpleBuilder.show()
+                    }
+                }
             }
+        } catch (e: Exception) {
+            Log.e("GameActivity", "Erro ao iniciar sequência de Game Over: ${e.message}")
+            e.printStackTrace()
             
-            val builder = AlertDialog.Builder(this)
-            builder.setTitle("Game Over")
-            builder.setMessage("Sua pontuação: ${gameLogic.score}\nRecord: ${Math.max(currentHighScore, gameLogic.score)}")
-            builder.setPositiveButton("Menu Principal") { _, _ ->
+            // Fallback em caso de erro no processo inteiro
+            try {
+                val builder = AlertDialog.Builder(this)
+                builder.setTitle("Game Over")
+                builder.setMessage("Sua pontuação: ${gameLogic.score}")
+                builder.setPositiveButton("Menu Principal") { _, _ ->
+                    resetGame()
+                }
+                builder.setNegativeButton("Jogar Novamente") { _, _ ->
+                    recreate()
+                }
+                builder.setCancelable(false)
+                builder.show()
+            } catch (e2: Exception) {
+                Log.e("GameActivity", "Erro fatal ao mostrar Game Over: ${e2.message}")
+                // Apenas reseta o jogo como última opção
                 resetGame()
             }
-            builder.setNegativeButton("Jogar Novamente") { _, _ ->
-                recreate()
-            }
-            builder.setCancelable(false)
-            builder.show()
-        } catch (e: Exception) {
-            Log.e("GameActivity", "Erro ao mostrar diálogo de Game Over: ${e.message}")
         }
     }
 
     override fun onPause() {
         super.onPause()
+        stopContinuousMove()
         if (!isPaused) {
             togglePause()
         }
@@ -336,6 +466,9 @@ class GameActivity : AppCompatActivity() {
         super.onDestroy()
         
         try {
+            // Parar job de movimento contínuo
+            stopContinuousMove()
+            
             // Liberar os recursos de mídia
             mediaPlayer?.release()
             mediaPlayer = null

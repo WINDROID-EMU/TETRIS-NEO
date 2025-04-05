@@ -92,6 +92,16 @@ class GameView(context: Context, private val gameLogic: GameLogic) : SurfaceView
         paint.textAlign = Paint.Align.CENTER
         canvas.drawText("PONTOS: ${gameLogic.score}", screenWidth / 2f, 50f, paint)
         
+        // Exibir mensagem "SPEED UP" quando necessário
+        if (gameLogic.showSpeedUpMessage) {
+            val alpha = Math.min(255, 255 * (3000 - gameLogic.speedUpMessageTimer) / 3000).toInt()
+            paint.color = Color.argb(alpha, 255, 255, 0) // Amarelo com fade out
+            paint.textSize = 80f
+            paint.isFakeBoldText = true
+            canvas.drawText("SPEED UP!", screenWidth / 2f, screenHeight / 2f - 100, paint)
+            paint.isFakeBoldText = false
+        }
+        
         // Desenhar grade
         paint.style = Paint.Style.FILL
         for (y in 0 until gameLogic.gridHeight) {
@@ -131,20 +141,25 @@ class GameView(context: Context, private val gameLogic: GameLogic) : SurfaceView
         
         // Desenhar próxima peça somente se houver espaço suficiente
         if (infoWidth >= gameLogic.blockSize * 4) {
+            // Desenhar "Próxima:" no mesmo nível da pontuação (y=50f)
             paint.color = Color.WHITE
             paint.textSize = 40f
             paint.textAlign = Paint.Align.LEFT
-            canvas.drawText("Próxima:", infoX, offsetY + 50, paint)
+            canvas.drawText("Próxima:", infoX, 40f, paint)
             
+            // Calcular a largura do texto "Próxima:" para dar espaço adequado
+            val textWidth = paint.measureText("Próxima:") + 40 // 50 pixels de espaço
+            
+            // Desenhar a próxima peça ao lado do texto, no mesmo nível
             for ((y, row) in gameLogic.nextPiece.shape.withIndex()) {
                 for ((x, cell) in row.withIndex()) {
                     if (cell == 1) {
                         paint.color = gameLogic.nextPiece.color
                         canvas.drawRect(
-                            infoX + x * gameLogic.blockSize.toFloat(),
-                            offsetY + 70 + y * gameLogic.blockSize.toFloat(),
-                            infoX + (x + 1) * gameLogic.blockSize.toFloat(),
-                            offsetY + 70 + (y + 1) * gameLogic.blockSize.toFloat(),
+                            infoX + textWidth + x * (gameLogic.blockSize/2).toFloat(),
+                            30f + y * (gameLogic.blockSize/2).toFloat(), // ligeiramente abaixo do texto para alinhar visualmente
+                            infoX + textWidth + (x + 1) * (gameLogic.blockSize/2).toFloat(),
+                            30f + (y + 1) * (gameLogic.blockSize/2).toFloat(),
                             paint
                         )
                     }
@@ -155,17 +170,20 @@ class GameView(context: Context, private val gameLogic: GameLogic) : SurfaceView
             paint.color = Color.WHITE
             paint.textSize = 30f
             paint.textAlign = Paint.Align.LEFT
-            canvas.drawText("Próxima:", 10f, 30f, paint)
+            canvas.drawText("Próxima:", 10f, 50f, paint) // Mantém a altura igual à pontuação
+            
+            // Calcular a largura do texto "Próxima:" para dar espaço adequado
+            val textWidth = paint.measureText("Próxima:") + 30 // 30 pixels de espaço
             
             for ((y, row) in gameLogic.nextPiece.shape.withIndex()) {
                 for ((x, cell) in row.withIndex()) {
                     if (cell == 1) {
                         paint.color = gameLogic.nextPiece.color
                         canvas.drawRect(
-                            120 + x * (gameLogic.blockSize / 2).toFloat(),
-                            10 + y * (gameLogic.blockSize / 2).toFloat(),
-                            120 + (x + 1) * (gameLogic.blockSize / 2).toFloat(),
-                            10 + (y + 1) * (gameLogic.blockSize / 2).toFloat(),
+                            10f + textWidth + x * (gameLogic.blockSize / 2).toFloat(),
+                            30f + y * (gameLogic.blockSize / 2).toFloat(),
+                            10f + textWidth + (x + 1) * (gameLogic.blockSize / 2).toFloat(),
+                            30f + (y + 1) * (gameLogic.blockSize / 2).toFloat(),
                             paint
                         )
                     }
@@ -220,26 +238,55 @@ class GameView(context: Context, private val gameLogic: GameLogic) : SurfaceView
     }
 
     private fun drawBlock(canvas: Canvas, x: Float, y: Float, color: Int) {
-        paint.color = color
-        paint.style = Paint.Style.FILL
-        canvas.drawRect(
-            x,
-            y,
-            x + gameLogic.blockSize.toFloat(),
-            y + gameLogic.blockSize.toFloat(),
-            paint
-        )
-        
-        // Adicionar borda para melhor visualização
-        paint.color = Color.argb(100, 255, 255, 255)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 2f
-        canvas.drawRect(
-            x,
-            y,
-            x + gameLogic.blockSize.toFloat(),
-            y + gameLogic.blockSize.toFloat(),
-            paint
-        )
+        // Verificar se é a peça bomba (cor branca)
+        val isBomb = color == Color.WHITE && gameLogic.currentPiece.isBomb
+
+        if (isBomb) {
+            // Desenhar a bomba como um simples quadrado branco
+            paint.color = Color.WHITE
+            paint.style = Paint.Style.FILL
+            canvas.drawRect(
+                x,
+                y,
+                x + gameLogic.blockSize.toFloat(),
+                y + gameLogic.blockSize.toFloat(),
+                paint
+            )
+            
+            // Adicionar borda preta para melhor visualização
+            paint.color = Color.BLACK
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 2f
+            canvas.drawRect(
+                x,
+                y,
+                x + gameLogic.blockSize.toFloat(),
+                y + gameLogic.blockSize.toFloat(),
+                paint
+            )
+        } else {
+            // Desenhar peça normal
+            paint.color = color
+            paint.style = Paint.Style.FILL
+            canvas.drawRect(
+                x,
+                y,
+                x + gameLogic.blockSize.toFloat(),
+                y + gameLogic.blockSize.toFloat(),
+                paint
+            )
+            
+            // Adicionar borda para melhor visualização
+            paint.color = Color.argb(100, 255, 255, 255)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 2f
+            canvas.drawRect(
+                x,
+                y,
+                x + gameLogic.blockSize.toFloat(),
+                y + gameLogic.blockSize.toFloat(),
+                paint
+            )
+        }
     }
 }
