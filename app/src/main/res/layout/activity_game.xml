@@ -3,23 +3,22 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="#000000">
 
     <!-- Imagem de fundo do jogo -->
-
-    <!-- Botões de controle do jogo em um container separado -->
 
     <FrameLayout
         android:id="@+id/gameContainer"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:layout_marginBottom="4dp"
+        android:visibility="visible"
         app:layout_constraintBottom_toTopOf="@+id/controlsOverlay"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.0" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <LinearLayout
         android:id="@+id/gameControlButtons"
@@ -35,29 +34,28 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/pauseButton"
-            android:layout_width="60dp"
-            android:layout_height="50dp"
-            android:layout_marginEnd="10dp"
+            android:layout_width="56dp"
+            android:layout_height="52dp"
+            android:layout_marginEnd="5dp"
             android:text="@string/pause"
             android:textColor="#FFFFFF"
             android:textSize="20sp"
             android:textStyle="bold"
             app:backgroundTint="#4CAF50"
-            app:cornerRadius="8dp"
+            app:cornerRadius="2dp"
             app:strokeColor="#FFFFFF"
             app:strokeWidth="1dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/resetButton"
-            android:layout_width="60dp"
-            android:layout_height="50dp"
+            android:layout_width="40dp"
+            android:layout_height="45dp"
+            android:foreground="@drawable/save_37110"
             android:text="@string/reset"
-            android:textColor="#FFFFFF"
-            android:textSize="20sp"
+            android:textSize="15sp"
             android:textStyle="bold"
-            app:backgroundTint="#FF5722"
+            android:visibility="gone"
             app:cornerRadius="8dp"
-            app:strokeColor="#FFFFFF"
             app:strokeWidth="1dp" />
     </LinearLayout>
 
@@ -66,7 +64,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="8dp"
-        android:foregroundTint="#5E35B1"
+        android:background="#4188DE8C"
+        android:foregroundTint="#FDD835"
         android:padding="10dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"

@@ -44,19 +44,46 @@ class StartActivity : AppCompatActivity() {
         val sharedPref = getSharedPreferences("tetris_prefs", Context.MODE_PRIVATE)
         val highScore = sharedPref.getInt("high_score", 0)
         binding.highScoreText.text = "RECORD: $highScore"
+        
+        // Verificar se existe um jogo em andamento e habilitar/desabilitar o botão CONTINUAR
+        val gameInProgress = sharedPref.getBoolean("game_in_progress", false)
+        binding.loadGameButton.isEnabled = gameInProgress
 
         // Tentar iniciar música de fundo se estiver habilitada
         if (soundEnabled) {
             startBackgroundMusic()
         }
 
-        // Configurar botão de início
-        binding.startButton.setOnClickListener {
-            val intent = Intent(this, GameActivity::class.java)
-            // Passar as configurações para o GameActivity
-            intent.putExtra("game_speed", gameSpeed)
-            intent.putExtra("sound_enabled", soundEnabled)
-            startActivity(intent)
+        // Configurar botão para Novo Jogo
+        binding.newGameButton.setOnClickListener {
+            // Limpar qualquer estado de jogo salvo
+            with(sharedPref.edit()) {
+                putBoolean("game_in_progress", false)
+                apply()
+            }
+            // Iniciar um novo jogo
+            startGame(false)
+        }
+        
+        // Configurar botão para Carregar Jogo
+        binding.loadGameButton.setOnClickListener {
+            // Verificar se existe um jogo em andamento
+            val gameInProgress = sharedPref.getBoolean("game_in_progress", false)
+            
+            if (gameInProgress) {
+                // Iniciar jogo continuando do estado salvo
+                startGame(true)
+            } else {
+                // Mostrar mensagem que não há jogo salvo
+                AlertDialog.Builder(this)
+                    .setTitle("Nenhum jogo salvo")
+                    .setMessage("Não existe nenhum jogo salvo para continuar.")
+                    .setPositiveButton("Iniciar Novo Jogo") { _, _ ->
+                        startGame(false)
+                    }
+                    .setNegativeButton("Cancelar", null)
+                    .show()
+            }
         }
         
         // Configurar botão de configurações
@@ -150,6 +177,15 @@ class StartActivity : AppCompatActivity() {
         builder.show()
     }
     
+    private fun startGame(continueGame: Boolean) {
+        val intent = Intent(this, GameActivity::class.java)
+        // Passar as configurações para o GameActivity
+        intent.putExtra("game_speed", gameSpeed)
+        intent.putExtra("sound_enabled", soundEnabled)
+        intent.putExtra("continue_game", continueGame)
+        startActivity(intent)
+    }
+    
     override fun onResume() {
         super.onResume()
         
@@ -157,6 +193,10 @@ class StartActivity : AppCompatActivity() {
         val sharedPref = getSharedPreferences("tetris_prefs", Context.MODE_PRIVATE)
         val highScore = sharedPref.getInt("high_score", 0)
         binding.highScoreText.text = "RECORD: $highScore"
+        
+        // Verificar se existe um jogo em andamento para habilitar/desabilitar o botão CONTINUAR
+        val gameInProgress = sharedPref.getBoolean("game_in_progress", false)
+        binding.loadGameButton.isEnabled = gameInProgress
         
         // Garantir que as barras de sistema permaneçam ocultas após retomar a atividade
         window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY

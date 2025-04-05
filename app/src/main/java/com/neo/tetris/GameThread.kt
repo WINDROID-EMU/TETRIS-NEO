@@ -16,23 +16,25 @@ class GameThread(
     private var paused = false
 
     fun setRunning(run: Boolean) {
-        Log.d("GameThread", "setRunning: $run")
+        Log.d("GameThread", "setRunning: $run. Thread ID: ${id}")
         running = run
         
         // Se estamos definindo para running = true, também devemos garantir que não está pausado
         if (run) {
             paused = false
+            Log.d("GameThread", "Definindo paused=false ao ativar running")
         }
         
         // Notificar a thread caso esteja esperando
         synchronized(this) {
             (this as Object).notify()
+            Log.d("GameThread", "Thread notificada após mudança de running")
         }
     }
     
     fun setPaused(pause: Boolean) {
+        Log.d("GameThread", "setPaused: $pause -> ${!pause}. Thread ID: ${id}, Estado anterior: running=$running, paused=$paused")
         paused = pause
-        Log.d("GameThread", "setPaused: $pause")
     }
     
     fun isPaused(): Boolean {
@@ -40,7 +42,7 @@ class GameThread(
     }
 
     override fun run() {
-        Log.d("GameThread", "Thread iniciada")
+        Log.d("GameThread", "Thread iniciada. ID: ${id}")
         while (running) {
             try {
                 if (!paused) {
@@ -69,9 +71,12 @@ class GameThread(
                                 }
                             }
                         }
+                    } else {
+                        Log.w("GameThread", "Surface não está válida para desenho")
                     }
                 } else {
                     // Se pausado, espera um pouco para não consumir CPU desnecessariamente
+                    Log.v("GameThread", "Thread em pausa, aguardando...")
                     synchronized(this) {
                         try {
                             (this as Object).wait(100L)
@@ -84,8 +89,9 @@ class GameThread(
                 sleep(16) // Aproximadamente 60 FPS
             } catch (e: Exception) {
                 Log.e("GameThread", "Erro no game loop: ${e.message}")
+                e.printStackTrace()
             }
         }
-        Log.d("GameThread", "Thread finalizada")
+        Log.d("GameThread", "Thread finalizada. ID: ${id}")
     }
 }

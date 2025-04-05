@@ -4,7 +4,7 @@
     <string name="game_title">NEO TETRIS</string>
     <string name="pause">II</string>
     <string name="resume">▶</string>
-    <string name="reset">↻</string>
+    <string name="reset">⤓</string>
     <string name="game_over">GAME OVER</string>
     <string name="score">Score: %1$d</string>
 </resources>
