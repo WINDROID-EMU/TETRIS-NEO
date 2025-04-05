@@ -1,13 +1,10 @@
 package com.neo.tetris
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.media.MediaPlayer
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
@@ -26,40 +23,6 @@ class GameActivity : AppCompatActivity() {
     private var isPaused = false
     private var mediaPlayer: MediaPlayer? = null
     private lateinit var sharedPref: SharedPreferences
-    private val handler = Handler(Looper.getMainLooper())
-    private var isMovingLeft = false
-    private var isMovingRight = false
-    
-    // Configurações do jogo
-    private var soundEnabled = true
-    private var gameSpeed = "normal"
-    
-    private val moveRunnable = object : Runnable {
-        override fun run() {
-            if (!isPaused) {
-                if (isMovingLeft) {
-                    gameLogic.moveLeft()
-                    handler.postDelayed(this, 150) // Movimento mais lento e constante
-                }
-                if (isMovingRight) {
-                    gameLogic.moveRight()
-                    handler.postDelayed(this, 150) // Movimento mais lento e constante
-                }
-            }
-        }
-    }
-    
-    // Runnable para verificar game over continuamente
-    private val gameOverCheckRunnable = object : Runnable {
-        override fun run() {
-            if (gameLogic.isGameOver && !isPaused) {
-                showGameOverDialog()
-            } else {
-                // Continuar verificando a cada 500ms
-                handler.postDelayed(this, 500)
-            }
-        }
-    }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,83 +38,74 @@ class GameActivity : AppCompatActivity() {
         binding = ActivityGameBinding.inflate(layoutInflater)
         setContentView(binding.root)
         
-        // Carregar configurações
-        sharedPref = getSharedPreferences("GameSettings", Context.MODE_PRIVATE)
-        soundEnabled = sharedPref.getBoolean("sound_enabled", true)
-        gameSpeed = sharedPref.getString("game_speed", "normal") ?: "normal"
+        // Inicializar SharedPreferences
+        sharedPref = getSharedPreferences("tetris_prefs", Context.MODE_PRIVATE)
         
         // Inicializar o jogo
-        gameLogic = GameLogic(this)
-        gameView = GameView(this, gameLogic)
-        binding.gameContainer.addView(gameView)
-        
-        // Configurar controles
-        setupControls()
-        
-        // Configurar botão de pausa
-        binding.pauseButton.setOnClickListener {
-            togglePause()
-        }
-        
-        // Configurar botão de reset
-        binding.resetButton.setOnClickListener {
-            resetGame()
-        }
-        
-        // Configurar música de fundo
-        setupBackgroundMusic()
+        initializeGame()
         
         // Iniciar verificação de game over
         startGameOverCheck()
     }
     
+    private fun initializeGame() {
+        // Inicializar a lógica do jogo
+        gameLogic = GameLogic(this)
+        gameView = GameView(this, gameLogic)
+        binding.gameContainer.addView(gameView)
+        
+        // Iniciar música de fundo
+        setupGameMusic()
+        
+        // Configurar controles
+        setupControls()
+    }
+    
+    private fun startGameOverCheck() {
+        lifecycleScope.launch {
+            while (true) {
+                delay(1000)
+                if (gameLogic.isGameOver && !isPaused) {
+                    showGameOverDialog()
+                    break
+                }
+            }
+        }
+    }
+    
+    private fun setupGameMusic() {
+        try {
+            // Verificar se o recurso gamesound.mp3 existe
+            val resourceId = resources.getIdentifier("gamesound", "raw", packageName)
+            if (resourceId != 0) {
+                mediaPlayer = MediaPlayer.create(this, resourceId)
+                mediaPlayer?.isLooping = true
+                mediaPlayer?.start()
+            } else {
+                Log.w("GameActivity", "Arquivo de música 'gamesound.mp3' não encontrado. Adicione o arquivo na pasta res/raw/")
+            }
+        } catch (e: Exception) {
+            Log.e("GameActivity", "Erro ao iniciar música: ${e.message}")
+        }
+    }
+    
     private fun setupControls() {
         try {
             // Configurar botões de controle direcional
-            binding.leftButton.setOnTouchListener { _, event ->
+            binding.leftButton.setOnClickListener {
                 try {
-                    if (!isPaused) {
-                        when (event.action) {
-                            MotionEvent.ACTION_DOWN -> {
-                                isMovingLeft = true
-                                gameLogic.moveLeft() // Movimento inicial imediato
-                                handler.postDelayed(moveRunnable, 150) // Inicia o movimento contínuo
-                                return@setOnTouchListener true
-                            }
-                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                                isMovingLeft = false
-                                handler.removeCallbacks(moveRunnable)
-                                return@setOnTouchListener true
-                            }
-                        }
-                    }
+                    if (!isPaused) gameLogic.moveLeft()
                 } catch (e: Exception) {
-                    Log.e("GameActivity", "Erro no touch do botão esquerdo: ${e.message}")
+                    Log.e("GameActivity", "Erro no botão esquerdo: ${e.message}")
                 }
-                return@setOnTouchListener false
             }
             
-            binding.rightButton.setOnTouchListener { _, event ->
+            binding.rightButton.setOnClickListener {
                 try {
-                    if (!isPaused) {
-                        when (event.action) {
-                            MotionEvent.ACTION_DOWN -> {
-                                isMovingRight = true
-                                gameLogic.moveRight() // Movimento inicial imediato
-                                handler.postDelayed(moveRunnable, 150) // Inicia o movimento contínuo
-                                return@setOnTouchListener true
-                            }
-                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                                isMovingRight = false
-                                handler.removeCallbacks(moveRunnable)
-                                return@setOnTouchListener true
-                            }
-                        }
-                    }
+                    if (!isPaused) gameLogic.moveRight()
                 } catch (e: Exception) {
-                    Log.e("GameActivity", "Erro no touch do botão direito: ${e.message}")
+                    Log.e("GameActivity", "Erro no botão direito: ${e.message}")
                 }
-                return@setOnTouchListener false
             }
             
             // Configuração para queda gradativa quando o botão para baixo é pressionado
@@ -193,26 +147,54 @@ class GameActivity : AppCompatActivity() {
                     Log.e("GameActivity", "Erro na rotação: ${e.message}")
                 }
             }
-        } catch (e: Exception) {
-            Log.e("GameActivity", "Erro ao configurar controles: ${e.message}")
-        }
-    }
-    
-    private fun setupBackgroundMusic() {
-        try {
-            // Verificar se o recurso gamesound.mp3 existe
-            val resourceId = resources.getIdentifier("gamesound", "raw", packageName)
-            if (resourceId != 0) {
-                mediaPlayer = MediaPlayer.create(this, resourceId)
-                mediaPlayer?.isLooping = true
-                // Reduzir o volume da música de fundo para 30%
-                mediaPlayer?.setVolume(0.5f, 0.5f)
-                mediaPlayer?.start()
-            } else {
-                Log.w("GameActivity", "Arquivo de música 'gamesound.mp3' não encontrado. Adicione o arquivo na pasta res/raw/")
+            
+            // Botão de pause/resume - com tratamento de erro
+            binding.pauseButton.setOnClickListener {
+                try {
+                    Log.d("GameActivity", "Botão de pausa clicado. Estado atual: ${if(isPaused) "PAUSADO" else "EM EXECUÇÃO"}")
+                    togglePause()
+                    Log.d("GameActivity", "Após togglePause: ${if(isPaused) "PAUSADO" else "EM EXECUÇÃO"}")
+                } catch (e: Exception) {
+                    Log.e("GameActivity", "Erro ao pausar/resumir: ${e.message}")
+                    e.printStackTrace()
+                    // Tentar recuperar de possíveis erros
+                    try {
+                        isPaused = !isPaused
+                        if (!isPaused) {
+                            gameView.resumeGame()
+                            binding.pauseButton.text = getString(R.string.pause)
+                            mediaPlayer?.start()
+                        } else {
+                            gameView.pauseGame()
+                            binding.pauseButton.text = getString(R.string.resume)
+                            mediaPlayer?.pause()
+                        }
+                    } catch (e2: Exception) {
+                        Log.e("GameActivity", "Falha ao recuperar erro de pausa: ${e2.message}")
+                    }
+                }
+            }
+            
+            // Botão de reset - com tratamento de erro
+            binding.resetButton.setOnClickListener {
+                try {
+                    resetGame()
+                } catch (e: Exception) {
+                    Log.e("GameActivity", "Erro ao resetar o jogo: ${e.message}")
+                    e.printStackTrace()
+                    // Tentar voltar para a tela inicial mesmo com o erro
+                    try {
+                        val intent = Intent(this, StartActivity::class.java)
+                        startActivity(intent)
+                        finish()
+                    } catch (e2: Exception) {
+                        Log.e("GameActivity", "Falha total ao voltar para tela inicial: ${e2.message}")
+                    }
+                }
             }
         } catch (e: Exception) {
-            Log.e("GameActivity", "Erro ao iniciar música: ${e.message}")
+            Log.e("GameActivity", "Erro crítico ao configurar controles: ${e.message}")
+            e.printStackTrace()
         }
     }
     
@@ -284,57 +266,41 @@ class GameActivity : AppCompatActivity() {
         }
     }
     
-    private fun startGameOverCheck() {
-        handler.post(gameOverCheckRunnable)
-    }
-    
     private fun showGameOverDialog() {
-        // Primeiro pausamos o jogo para evitar atualizações no fundo
-        isPaused = true
-        gameView.pauseGame()
-        
-        // Pausar música de fundo
-        mediaPlayer?.pause()
-        
-        // Salvar high score se necessário
-        val currentScore = gameLogic.score
-        val highScore = sharedPref.getInt("high_score", 0)
-        if (currentScore > highScore) {
-            sharedPref.edit().putInt("high_score", currentScore).apply()
+        try {
+            // Primeiro pausamos o jogo para evitar atualizações no fundo
+            if (!isPaused) {
+                isPaused = true
+                gameView.pauseGame()
+            }
+            
+            // Verificar e salvar pontuação mais alta
+            val currentHighScore = sharedPref.getInt("high_score", 0)
+            if (gameLogic.score > currentHighScore) {
+                sharedPref.edit().putInt("high_score", gameLogic.score).apply()
+            }
+            
+            val builder = AlertDialog.Builder(this)
+            builder.setTitle("Game Over")
+            builder.setMessage("Sua pontuação: ${gameLogic.score}\nRecord: ${Math.max(currentHighScore, gameLogic.score)}")
+            builder.setPositiveButton("Menu Principal") { _, _ ->
+                resetGame()
+            }
+            builder.setNegativeButton("Jogar Novamente") { _, _ ->
+                recreate()
+            }
+            builder.setCancelable(false)
+            builder.show()
+        } catch (e: Exception) {
+            Log.e("GameActivity", "Erro ao mostrar diálogo de Game Over: ${e.message}")
         }
-        
-        // Criar e exibir o diálogo de game over
-        AlertDialog.Builder(this)
-            .setTitle("Game Over")
-            .setMessage("Sua pontuação: $currentScore\nMelhor pontuação: ${Math.max(highScore, currentScore)}")
-            .setCancelable(false)
-            .setPositiveButton("Jogar Novamente") { _, _ ->
-                restartGame()
-            }
-            .setNegativeButton("Menu Inicial") { _, _ ->
-                // Voltar para o menu inicial
-                val intent = Intent(this, StartActivity::class.java)
-                startActivity(intent)
-                finish()
-            }
-            .show()
     }
-    
-    private fun restartGame() {
-        // Reiniciar completamente a atividade
-        val intent = Intent(this, GameActivity::class.java)
-        intent.putExtra("sound_enabled", soundEnabled)
-        intent.putExtra("game_speed", gameSpeed)
-        startActivity(intent)
-        finish()
-    }
-    
+
     override fun onPause() {
         super.onPause()
         if (!isPaused) {
             togglePause()
         }
-        mediaPlayer?.pause()
     }
     
     override fun onResume() {
@@ -348,7 +314,7 @@ class GameActivity : AppCompatActivity() {
                 or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                 or View.SYSTEM_UI_FLAG_FULLSCREEN)
         
-        if (!isPaused && !gameLogic.isGameOver) {
+        if (!isPaused && mediaPlayer != null) {
             mediaPlayer?.start()
         }
     }
@@ -368,14 +334,18 @@ class GameActivity : AppCompatActivity() {
     
     override fun onDestroy() {
         super.onDestroy()
+        
         try {
-            handler.removeCallbacks(moveRunnable)
-            handler.removeCallbacks(gameOverCheckRunnable)
+            // Liberar os recursos de mídia
             mediaPlayer?.release()
             mediaPlayer = null
+            
+            // Liberar recursos do GameLogic
+            if (::gameLogic.isInitialized) {
+                gameLogic.releaseResources()
+            }
         } catch (e: Exception) {
             Log.e("GameActivity", "Erro ao liberar recursos: ${e.message}")
         }
-        gameLogic.releaseResources()
     }
 } 
