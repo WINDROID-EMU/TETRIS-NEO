@@ -481,4 +481,28 @@ class GameActivity : AppCompatActivity() {
             Log.e("GameActivity", "Erro ao liberar recursos: ${e.message}")
         }
     }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // Salvar o estado do jogo
+        outState.putSerializable("gameLogic", gameLogic.saveState())
+        outState.putBoolean("isPaused", isPaused)
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        // Restaurar o estado do jogo
+        val savedGameLogic = savedInstanceState.getSerializable("gameLogic") as? GameLogic.State
+        if (savedGameLogic != null) {
+            gameLogic.restoreState(savedGameLogic)
+        }
+        isPaused = savedInstanceState.getBoolean("isPaused", false)
+        if (isPaused) {
+            gameView.pauseGame()
+            mediaPlayer?.pause()
+        } else {
+            gameView.resumeGame()
+            mediaPlayer?.start()
+        }
+    }
 } 

@@ -38,10 +38,10 @@
                 android:id="@+id/scoreText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="10dp"
                 android:text="Pontuação: 0"
                 android:textColor="#FFFFFF"
-                android:textSize="20sp"
+                android:textSize="15sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -51,7 +51,7 @@
                 android:layout_marginBottom="24dp"
                 android:text="Recorde: 0"
                 android:textColor="#FFFFFF"
-                android:textSize="18sp" />
+                android:textSize="15sp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/playAgainButton"

@@ -477,8 +477,10 @@ class GameLogic(private val context: Context) {
                 for (x in 0 until gridWidth) {
                     lockedPositions.remove(Pair(x, line))
                 }
-                
-                // Mover todas as linhas acima para baixo
+            }
+            
+            // Mover todas as linhas acima para baixo
+            for (line in fullLines) {
                 val newPositions = mutableMapOf<Pair<Int, Int>, Int>()
                 for ((pos, color) in lockedPositions) {
                     val (px, py) = pos
@@ -492,9 +494,6 @@ class GameLogic(private val context: Context) {
             }
             
             updateGrid()
-            
-            // Verificar se há peças flutuantes após limpar as linhas
-            updateAfterExplosion(lockedPositions.keys.toList())
             
             // Pontuar baseado no número de linhas limpas de uma vez
             when (fullLines.size) {
@@ -724,5 +723,50 @@ class GameLogic(private val context: Context) {
         
         speedUpSound?.release()
         speedUpSound = null
+    }
+
+    // Classe interna para armazenar o estado do jogo
+    data class State(
+        val grid: Array<IntArray>,
+        val currentPiece: Piece,
+        val nextPiece: Piece,
+        val lockedPositions: Map<Pair<Int, Int>, Int>,
+        val score: Int,
+        val fallTime: Long,
+        val fallSpeed: Int,
+        val isGameOver: Boolean,
+        val isFastFalling: Boolean
+    ) : java.io.Serializable
+
+    // Método para salvar o estado atual do jogo
+    fun saveState(): State {
+        return State(
+            grid.map { it.clone() }.toTypedArray(),
+            currentPiece.copy(),
+            nextPiece.copy(),
+            HashMap(lockedPositions),
+            score,
+            fallTime,
+            fallSpeed,
+            isGameOver,
+            isFastFalling
+        )
+    }
+
+    // Método para restaurar o estado do jogo
+    fun restoreState(state: State) {
+        grid.forEachIndexed { index, row ->
+            row.indices.forEach { colIndex ->
+                grid[index][colIndex] = state.grid[index][colIndex]
+            }
+        }
+        currentPiece = state.currentPiece.copy()
+        nextPiece = state.nextPiece.copy()
+        lockedPositions = HashMap(state.lockedPositions)
+        score = state.score
+        fallTime = state.fallTime
+        fallSpeed = state.fallSpeed
+        isGameOver = state.isGameOver
+        isFastFalling = state.isFastFalling
     }
 }
